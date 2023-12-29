@@ -2,7 +2,6 @@
 
 import re
 import sys
-from functools import reduce
 
 class RangeMapper:
     def __init__(self, dst, src, len):
@@ -13,8 +12,18 @@ class RangeMapper:
     def inputInRange(self, input):
         return input >= self.source and input < self.source + self.rangeLen
 
+    """
+    returns a pair:
+    1st value is mapped value
+    2nd value is the number of values that are equal or greater than the for the input value
+    and are still in this range
+    or None if the input value is not in range
+    example: src=3 len=7 dest=100 input=5 -> (102, ) 3 4 (5) 6 7 8 9
+    """
     def map(self, input):
-        return self.dest + input - self.source if self.inputInRange(input) else input
+        mappedVal = self.dest + input - self.source
+        remainRange = self.rangeLen - input + self.source
+        return (mappedVal, remainRange) if self.inputInRange(input) else (input, None)
 
 class RangeMapperList:
     def __init__(self):
@@ -24,10 +33,15 @@ class RangeMapperList:
         self.list.append(map)
 
     def map(self, input):
+        firstSourceAfterInput = None
         for map in self.list:
+            if map.source > input and (firstSourceAfterInput is None or firstSourceAfterInput > map.source):
+                firstSourceAfterInput = map.source
             if map.inputInRange(input):
                 return map.map(input)
-        return input
+        if firstSourceAfterInput is not None:
+            firstSourceAfterInput -= input
+        return (input, firstSourceAfterInput)
 
 converters = [
     'seed-to-soil',
@@ -59,20 +73,33 @@ def addRangeMapper(mapper, conv):
         rangeMappers[conv] = mapList
     mapList.add(mapper)
 
+def updateRemainRange(minRemainRange, newRemainRange):
+    if minRemainRange is None:
+        return newRemainRange
+    if newRemainRange is None:
+        return minRemainRange
+    return min(minRemainRange, newRemainRange)
 
 def convertSeed(seed):
+    minRemainRange = None
     for conv in converters:
         mapper = rangeMappers.get(conv)
         if mapper is not None:
-            seed = mapper.map(seed)
-    return seed
+            (seed, remainRange) = mapper.map(seed)
+            minRemainRange = updateRemainRange(minRemainRange, remainRange)
+    return (seed, minRemainRange)
 
 def convertSeedRangeAndGetMin(startSeed, rangeLen):
-    return reduce(
-        min,
-        (convertSeed(s) for s in range(startSeed, startSeed + rangeLen))
-        )
-    # return [convertSeed(s) for s in range(startSeed, startSeed + rangeLen)]
+    seed = startSeed
+    endSeed = startSeed + rangeLen
+    minConvertedSeed = None
+    while seed < endSeed:
+        (convertedSeed, minRemainRange) = convertSeed(seed)
+        if minRemainRange is None:
+            minRemainRange = 1
+        seed += minRemainRange
+        minConvertedSeed = convertedSeed if minConvertedSeed is None else min(convertedSeed, minConvertedSeed)
+    return minConvertedSeed
 
 def main(inputfile):
     activeConv = ''
